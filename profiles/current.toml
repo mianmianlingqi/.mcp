@@ -8,6 +8,7 @@ include = [
   "registry/context7.toml",
   "registry/github.toml",
   "registry/office-document.toml",
+  "registry/quality-search-gateway.toml",
 ]
 
 [placeholders]

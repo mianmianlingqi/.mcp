@@ -2,7 +2,7 @@ param(
   [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path,
   [string]$CodexConfig = (Join-Path $env:USERPROFILE '.codex\config.toml'),
   [string]$ProfilePath = (Join-Path $RepoRoot 'profiles\current.toml'),
-  [string[]]$Names = @('tia_portal_v17', 'openai-developer-docs', 'deepwiki', 'context7', 'github', 'office-document'),
+  [string[]]$Names = @('tia_portal_v17', 'openai-developer-docs', 'deepwiki', 'context7', 'github', 'office-document', 'quality-search-gateway'),
   [switch]$DryRun,
   [switch]$Apply
 )
@@ -13,11 +13,15 @@ $ErrorActionPreference = 'Stop'
 $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 function Get-Placeholders {
-  param([string]$Path)
+  param(
+    [string]$Path,
+    [string]$RepoRoot
+  )
 
   $map = @{}
   $defaultCodexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
   $map['CODEX_HOME'] = $defaultCodexHome
+  $map['REPO_ROOT'] = $RepoRoot
 
   if (-not (Test-Path -LiteralPath $Path)) {
     return $map
@@ -70,7 +74,7 @@ if (-not (Test-Path -LiteralPath $registry)) {
   throw "Missing registry directory: $registry"
 }
 
-$placeholders = Get-Placeholders -Path $ProfilePath
+$placeholders = Get-Placeholders -Path $ProfilePath -RepoRoot $RepoRoot
 $snippets = @()
 
 foreach ($name in $Names) {

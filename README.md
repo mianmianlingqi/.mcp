@@ -11,6 +11,8 @@ private Codex config files.
 - `registry/`: one TOML snippet per MCP server.
 - `profiles/current.toml`: the current machine's MCP set, with local paths
   templated where practical.
+- `servers/`: checked-in local MCP servers and tools.
+- `docs/`: supporting notes and curated source lists.
 - `scripts/install-mcps.ps1`: installs selected MCP snippets into
   `%USERPROFILE%\.codex\config.toml`.
 - `scripts/validate-mcps.ps1`: checks snippet syntax, missing placeholders, and
@@ -24,6 +26,12 @@ private Codex config files.
 - `context7`: current library/framework documentation MCP.
 - `github`: GitHub Copilot MCP, token via `GITHUB_PAT_TOKEN`.
 - `office_document`: file-level Office document MCP.
+- `quality_search_gateway`: high-quality search gateway for Web search and
+  authoritative source APIs such as arXiv, Semantic Scholar, OpenAlex,
+  Crossref, PEPs, IETF, MDN BCD, OSV, PyPI, npm, GitHub, and Hugging Face.
+
+See `docs/engineering-knowledge-sources.md` for the curated engineering source
+list used to guide search routing.
 
 ## Safety
 

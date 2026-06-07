@@ -3,6 +3,8 @@ Thumbs.db
 *.log
 *.tmp
 *.bak
+__pycache__/
+*.pyc
 *.sqlite
 *.sqlite-*
 auth.json

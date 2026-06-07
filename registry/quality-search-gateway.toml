@@ -1,0 +1,5 @@
+[mcp_servers.quality_search_gateway]
+command = "python"
+args = ['{{REPO_ROOT}}\servers\quality-search-gateway\server.py', "--stdio"]
+startup_timeout_sec = 20.0
+tool_timeout_sec = 120.0
