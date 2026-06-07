@@ -52,6 +52,16 @@ class SearchResult:
         }
 
 
+@dataclass(frozen=True)
+class BackendSpec:
+    name: str
+    source_types: Tuple[str, ...]
+    handler: Any
+    enabled_by_default: bool = True
+    env_var: str = ""
+    description: str = ""
+
+
 def log(message: str) -> None:
     print(f"[quality-search-gateway] {message}", file=sys.stderr, flush=True)
 
@@ -174,10 +184,12 @@ def infer_source_type(query: str, intent: str = "", language: str = "") -> str:
         return "security"
     if any(token in q for token in ["pypi", "npm", "package", "metadata", "版本", "依赖"]):
         return "packages"
-    if any(token in q for token in ["github", "repository", "issue", "pull request", "repo"]):
+    if any(token in q for token in ["github", "repository", "issue", "pull request"]) or re.search(r"\brepo\b", q):
         return "code"
     if any(token in q for token in ["hugging face", "model", "dataset", "embedding", "spaces"]):
         return "models"
+    if any(token in q for token in ["think tank", "policy", "智库", "政策研究", "brookings", "rand", "csis"]):
+        return "think_tanks"
     if any("\u4e00" <= ch <= "\u9fff" for ch in q):
         return "web_cn"
     return "web"
@@ -763,6 +775,58 @@ def fetch_url_content(url: str) -> Dict[str, Any]:
     return {"url": url, "title": title, "source": "standard-fetch", "content": summarize_text(text, 3000), "metadata": {}}
 
 
+BACKENDS: Dict[str, BackendSpec] = {
+    "arxiv": BackendSpec("arxiv", ("academic",), search_arxiv, description="arXiv 预印本"),
+    "semantic_scholar": BackendSpec(
+        "semantic_scholar",
+        ("academic",),
+        search_semantic_scholar,
+        enabled_by_default=False,
+        env_var="SEMANTIC_SCHOLAR_API_KEY",
+        description="Semantic Scholar 论文图谱，默认关闭以避免无 key 429",
+    ),
+    "openalex": BackendSpec("openalex", ("academic",), search_openalex, description="OpenAlex 开放学术元数据"),
+    "crossref": BackendSpec("crossref", ("academic",), search_crossref, description="Crossref DOI/出版元数据"),
+    "peps": BackendSpec("peps", ("standards",), search_peps, description="Python PEPs"),
+    "ietf": BackendSpec("ietf", ("standards",), search_ietf, description="IETF/RFC"),
+    "mdn": BackendSpec("mdn", ("standards",), search_mdn, description="MDN 文档与兼容性相关结果"),
+    "osv": BackendSpec("osv", ("security",), search_osv, description="OSV 漏洞库"),
+    "pypi": BackendSpec("pypi", ("packages",), search_pypi, description="PyPI 包元数据"),
+    "npm": BackendSpec("npm", ("packages",), search_npm, description="npm Registry 包元数据"),
+    "github": BackendSpec("github", ("code",), search_github, env_var="GITHUB_TOKEN", description="GitHub Search API"),
+    "huggingface": BackendSpec("huggingface", ("models",), search_huggingface, description="Hugging Face Hub"),
+    "exa": BackendSpec("exa", ("web", "web_cn"), search_exa, env_var="EXA_API_KEY", description="Exa Web 搜索"),
+    "open_web": BackendSpec("open_web", ("web", "web_cn"), search_open_web, description="免 key Web 搜索回退"),
+}
+
+
+ROUTES = {
+    "academic": ["arxiv", "openalex", "crossref"],
+    "standards": ["peps", "ietf", "mdn"],
+    "security": ["osv"],
+    "packages": ["pypi", "npm"],
+    "code": ["github"],
+    "models": ["huggingface"],
+    "think_tanks": ["exa", "open_web"],
+    "web_cn": ["open_web", "exa"],
+    "web": ["exa", "open_web"],
+}
+
+
+def backend_enabled(spec: BackendSpec) -> bool:
+    if spec.enabled_by_default:
+        return True
+    if spec.env_var and os.getenv(spec.env_var):
+        return True
+    forced = os.getenv("QUALITY_SEARCH_ENABLE_BACKENDS", "")
+    return spec.name in {item.strip() for item in forced.split(",") if item.strip()}
+
+
+def enabled_route(source_type: str, route: List[str]) -> List[str]:
+    enabled = [name for name in route if backend_enabled(BACKENDS[name])]
+    return enabled or route[:1]
+
+
 def call_backend(
     name: str,
     query: str,
@@ -770,38 +834,11 @@ def call_backend(
     freshness: str = "",
     category: str = "",
 ) -> List[SearchResult]:
-    mapping = {
-        "arxiv": search_arxiv,
-        "semantic_scholar": search_semantic_scholar,
-        "openalex": search_openalex,
-        "crossref": search_crossref,
-        "peps": search_peps,
-        "ietf": search_ietf,
-        "mdn": search_mdn,
-        "osv": search_osv,
-        "pypi": search_pypi,
-        "npm": search_npm,
-        "github": search_github,
-        "huggingface": search_huggingface,
-        "exa": search_exa,
-        "open_web": search_open_web,
-    }
-    fn = mapping[name]
+    spec = BACKENDS[name]
+    fn = spec.handler
     if name == "arxiv":
         return fn(query, max_results=max_results, freshness=freshness, category=category)
     return fn(query, max_results=max_results)
-
-
-ROUTES = {
-    "academic": ["arxiv", "semantic_scholar", "openalex", "crossref"],
-    "standards": ["peps", "ietf", "mdn"],
-    "security": ["osv"],
-    "packages": ["pypi", "npm"],
-    "code": ["github"],
-    "models": ["huggingface"],
-    "web_cn": ["open_web", "exa"],
-    "web": ["exa", "open_web"],
-}
 
 PACKAGE_BACKENDS = {
     "pypi": ["pypi"],
@@ -827,6 +864,7 @@ def run_route(
         route = standards_route(query)
     else:
         route = ROUTES.get(source_type, ROUTES["web"])
+    route = enabled_route(source_type, route)
     all_results: List[SearchResult] = []
     errors: List[str] = []
     for backend in route:
@@ -908,10 +946,22 @@ def tool_diagnostics(args: Dict[str, Any]) -> Dict[str, Any]:
     del args
     env_vars = ["EXA_API_KEY", "FIRECRAWL_API_KEY", "GITHUB_TOKEN", "SEMANTIC_SCHOLAR_API_KEY"]
     configured = {name: bool(os.getenv(name)) for name in env_vars}
+    backends = {
+        name: {
+            "enabled": backend_enabled(spec),
+            "enabled_by_default": spec.enabled_by_default,
+            "env_var": spec.env_var or None,
+            "source_types": list(spec.source_types),
+            "description": spec.description,
+        }
+        for name, spec in BACKENDS.items()
+    }
     return {
         "server": "quality-search-gateway",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "configured_env": configured,
+        "routes": ROUTES,
+        "backends": backends,
         "free_backends": ["arXiv", "OpenAlex", "Crossref", "PEPs", "IETF", "MDN", "OSV", "PyPI", "npm", "Hugging Face"],
         "enhanced_backends": {
             "Exa": configured["EXA_API_KEY"],
@@ -1002,7 +1052,7 @@ TOOLS = {
                 "query": {"type": "string"},
                 "source_type": {
                     "type": "string",
-                    "enum": ["academic", "standards", "security", "packages", "code", "models", "web", "web_cn"],
+                    "enum": ["academic", "standards", "security", "packages", "code", "models", "think_tanks", "web", "web_cn"],
                 },
                 "freshness": {"type": "string"},
                 "category": {"type": "string", "description": "arXiv category，例如 cs.AI、cs.LG、cs.CL"},

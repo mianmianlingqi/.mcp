@@ -16,6 +16,7 @@
 - Python/npm 包版本和元数据：优先 `search_sources`，`source_type=packages`。
 - GitHub 仓库、Issue、PR、Release：优先 `search_sources`，`source_type=code`。
 - 模型、数据集、Spaces：优先 `search_sources`，`source_type=models`。
+- 智库、政策研究、机构报告：优先 `search_sources`，`source_type=think_tanks`。
 - 中文资料、国内软件、普通教程：使用 `search` 自动路由。
 - 需要网页正文时：使用 `search_and_fetch` 或 `fetch_url`。
 - 重要结论需要交叉验证时：使用 `compare_sources`。

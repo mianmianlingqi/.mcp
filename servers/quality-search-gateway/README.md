@@ -11,7 +11,14 @@
 - 安全：OSV
 - 包生态：PyPI、npm Registry
 - 代码/模型：GitHub Search API、Hugging Face Hub API
+- 智库/政策研究：预留 `think_tanks` source type，默认经 Exa/open-webSearch 路由，后续可接 Brookings、RAND、CSIS 等专用连接器
 - Web 搜索/抽取：Exa、Firecrawl、open-webSearch 以可选后端形式接入；未配置 key 或服务不可用时会返回清晰降级信息
+
+## 扩展后端
+
+后端统一在 `BACKENDS` 注册表中声明名称、来源类型、处理函数、默认启用状态和环境变量。新增智库或机构源时，优先新增一个搜索函数，再登记 `BackendSpec`，最后把后端名加入 `ROUTES["think_tanks"]` 或对应 source type。
+
+`semantic_scholar` 已保留为可选后端，但默认不进入 academic 路由；配置 `SEMANTIC_SCHOLAR_API_KEY` 或设置 `QUALITY_SEARCH_ENABLE_BACKENDS=semantic_scholar` 后才会启用。
 
 ## MCP 工具
 

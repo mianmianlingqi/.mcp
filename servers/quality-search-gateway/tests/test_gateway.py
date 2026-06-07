@@ -18,6 +18,7 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(server.infer_source_type("lodash prototype pollution OSV"), "security")
         self.assertEqual(server.infer_source_type("pydantic latest PyPI metadata"), "packages")
         self.assertEqual(server.infer_source_type("Hugging Face text embedding models"), "models")
+        self.assertEqual(server.infer_source_type("RAND policy report AI"), "think_tanks")
 
     def test_dedupe_by_doi_and_url(self):
         items = [
@@ -61,6 +62,12 @@ class GatewayTests(unittest.TestCase):
         payload = server.encode_mcp_frame({"jsonrpc": "2.0", "id": 1, "result": {"ok": True}})
         self.assertTrue(payload.startswith(b"Content-Length: "))
         self.assertIn(b"\r\n\r\n", payload)
+
+    def test_backend_registry_defaults(self):
+        self.assertIn("semantic_scholar", server.BACKENDS)
+        self.assertFalse(server.BACKENDS["semantic_scholar"].enabled_by_default)
+        self.assertNotIn("semantic_scholar", server.ROUTES["academic"])
+        self.assertEqual(server.ROUTES["think_tanks"], ["exa", "open_web"])
 
 
 if __name__ == "__main__":
