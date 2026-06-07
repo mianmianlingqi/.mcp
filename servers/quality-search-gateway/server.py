@@ -179,13 +179,26 @@ def infer_source_type(query: str, intent: str = "", language: str = "") -> str:
     return "web"
 
 
-def search_arxiv(query: str, max_results: int = MAX_RESULTS) -> List[SearchResult]:
+def wants_latest(value: str = "") -> bool:
+    q = value.lower()
+    return any(token in q for token in ["latest", "recent", "new", "newest", "fresh", "最新", "近期", "最近"])
+
+
+def arxiv_search_query(query: str) -> str:
+    q = query.lower()
+    if any(token in q for token in ["cs.ai", "artificial intelligence", "人工智能"]) or re.search(r"\bai\b", q):
+        return "cat:cs.AI"
+    return f"all:{query}"
+
+
+def search_arxiv(query: str, max_results: int = MAX_RESULTS, freshness: str = "") -> List[SearchResult]:
+    latest = wants_latest(f"{query} {freshness}")
     params = urllib.parse.urlencode(
         {
-            "search_query": f"all:{query}",
+            "search_query": arxiv_search_query(query),
             "start": 0,
             "max_results": max_results,
-            "sortBy": "relevance",
+            "sortBy": "submittedDate" if latest else "relevance",
             "sortOrder": "descending",
         }
     )
@@ -215,6 +228,11 @@ def search_arxiv(query: str, max_results: int = MAX_RESULTS) -> List[SearchResul
                     "published": entry.findtext("atom:published", default="", namespaces=ns),
                     "updated": entry.findtext("atom:updated", default="", namespaces=ns),
                     "authors": [a for a in authors if a],
+                    "categories": [
+                        c.attrib.get("term")
+                        for c in entry.findall("atom:category", ns)
+                        if c.attrib.get("term")
+                    ],
                 },
             )
         )
@@ -694,7 +712,7 @@ def fetch_url_content(url: str) -> Dict[str, Any]:
     return {"url": url, "title": title, "source": "standard-fetch", "content": summarize_text(text, 3000), "metadata": {}}
 
 
-def call_backend(name: str, query: str, max_results: int = MAX_RESULTS) -> List[SearchResult]:
+def call_backend(name: str, query: str, max_results: int = MAX_RESULTS, freshness: str = "") -> List[SearchResult]:
     mapping = {
         "arxiv": search_arxiv,
         "semantic_scholar": search_semantic_scholar,
@@ -712,6 +730,8 @@ def call_backend(name: str, query: str, max_results: int = MAX_RESULTS) -> List[
         "open_web": search_open_web,
     }
     fn = mapping[name]
+    if name == "arxiv":
+        return fn(query, max_results=max_results, freshness=freshness)
     return fn(query, max_results=max_results)
 
 
@@ -737,7 +757,7 @@ PACKAGE_BACKENDS = {
 }
 
 
-def run_route(query: str, source_type: str, max_results: int = MAX_RESULTS) -> Dict[str, Any]:
+def run_route(query: str, source_type: str, max_results: int = MAX_RESULTS, freshness: str = "") -> Dict[str, Any]:
     if source_type == "packages":
         route = package_route(query)
     elif source_type == "standards":
@@ -748,7 +768,7 @@ def run_route(query: str, source_type: str, max_results: int = MAX_RESULTS) -> D
     errors: List[str] = []
     for backend in route:
         try:
-            results = call_backend(backend, query, max_results=max_results)
+            results = call_backend(backend, query, max_results=max_results, freshness=freshness)
             all_results.extend(results)
         except Exception as exc:  # noqa: BLE001 - 需要保留后端降级信息
             errors.append(f"{backend}: {exc}")
@@ -788,14 +808,16 @@ def tool_search(args: Dict[str, Any]) -> Dict[str, Any]:
     query = require_str(args, "query")
     intent = str(args.get("intent") or "")
     language = str(args.get("language") or "")
+    freshness = str(args.get("freshness") or "")
     source_type = infer_source_type(query, intent, language)
-    return run_route(query, source_type, max_results=int(args.get("max_results") or MAX_RESULTS))
+    return run_route(query, source_type, max_results=int(args.get("max_results") or MAX_RESULTS), freshness=freshness)
 
 
 def tool_search_sources(args: Dict[str, Any]) -> Dict[str, Any]:
     query = require_str(args, "query")
     source_type = str(args.get("source_type") or infer_source_type(query))
-    return run_route(query, source_type, max_results=int(args.get("max_results") or MAX_RESULTS))
+    freshness = str(args.get("freshness") or "")
+    return run_route(query, source_type, max_results=int(args.get("max_results") or MAX_RESULTS), freshness=freshness)
 
 
 def tool_fetch_url(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -879,6 +901,7 @@ TOOLS = {
                     "type": "string",
                     "enum": ["academic", "standards", "security", "packages", "code", "models", "web", "web_cn"],
                 },
+                "freshness": {"type": "string"},
                 "max_results": {"type": "integer", "minimum": 1, "maximum": 10},
             },
             "required": ["query"],
@@ -1024,6 +1047,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--query", help="命令行查询")
     parser.add_argument("--intent", default="", help="查询意图")
     parser.add_argument("--source-type", default="", help="显式来源类型")
+    parser.add_argument("--freshness", default="", help="新鲜度偏好，例如 latest/recent/最新")
     args = parser.parse_args(argv)
 
     if args.stdio:
@@ -1033,7 +1057,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return run_self_test()
     if args.query:
         source_type = args.source_type or infer_source_type(args.query, args.intent)
-        print(json.dumps(run_route(args.query, source_type, max_results=5), ensure_ascii=False, indent=2))
+        print(json.dumps(run_route(args.query, source_type, max_results=5, freshness=args.freshness), ensure_ascii=False, indent=2))
         return 0
     parser.print_help()
     return 0

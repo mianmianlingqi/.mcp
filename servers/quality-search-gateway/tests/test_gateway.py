@@ -36,6 +36,11 @@ class GatewayTests(unittest.TestCase):
     def test_meaningful_tokens(self):
         self.assertEqual(server.meaningful_tokens("pattern matching Python PEP"), ["pattern", "matching"])
 
+    def test_arxiv_latest_helpers(self):
+        self.assertTrue(server.wants_latest("latest artificial intelligence papers"))
+        self.assertEqual(server.arxiv_search_query("latest artificial intelligence papers"), "cat:cs.AI")
+        self.assertEqual(server.arxiv_search_query("RAG evaluation benchmark"), "all:RAG evaluation benchmark")
+
 
 if __name__ == "__main__":
     unittest.main()
