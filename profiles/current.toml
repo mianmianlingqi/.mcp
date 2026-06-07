@@ -1,0 +1,17 @@
+# Current MCP profile for this machine.
+# Local executable paths are intentionally templated for portability.
+
+include = [
+  "registry/tia_portal_v17.toml",
+  "registry/openai-developer-docs.toml",
+  "registry/deepwiki.toml",
+  "registry/context7.toml",
+  "registry/github.toml",
+  "registry/office-document.toml",
+]
+
+[placeholders]
+CODEX_HOME = 'C:\Users\35928\.codex'
+TIA_V17_MCP_SERVER_EXE = 'A:\project\TIA_V17_MCP_workspace_20260605_211635\source\TIA_Portal_Openness_MCP_v17\tools\tiaportal-mcp\src\TiaMcpServer\bin-v17\Release\net48\TiaMcpServer.exe'
+TIA_PORTAL_V17_ROOT = 'E:\software\Botuv17\Automation\Portal V17'
+

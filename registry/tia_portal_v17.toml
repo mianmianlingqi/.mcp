@@ -1,0 +1,6 @@
+[mcp_servers.tia_portal_v17]
+command = '{{TIA_V17_MCP_SERVER_EXE}}'
+args = ["--tia-major-version", "17", "--tia-portal-location", '{{TIA_PORTAL_V17_ROOT}}']
+startup_timeout_sec = 20.0
+tool_timeout_sec = 600.0
+
