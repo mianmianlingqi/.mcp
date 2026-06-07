@@ -31,15 +31,36 @@ class GatewayTests(unittest.TestCase):
 
     def test_tool_list_contains_expected_tools(self):
         tools = {tool["name"] for tool in server.mcp_tool_list()["tools"]}
-        self.assertLessEqual({"search", "search_sources", "search_and_fetch", "fetch_url", "compare_sources"}, tools)
+        self.assertLessEqual(
+            {"search", "search_sources", "latest_papers", "search_and_fetch", "fetch_url", "compare_sources", "diagnostics"},
+            tools,
+        )
 
     def test_meaningful_tokens(self):
         self.assertEqual(server.meaningful_tokens("pattern matching Python PEP"), ["pattern", "matching"])
 
     def test_arxiv_latest_helpers(self):
         self.assertTrue(server.wants_latest("latest artificial intelligence papers"))
+        self.assertFalse(server.query_requests_latest("RAG evaluation benchmark recent papers"))
+        self.assertTrue(server.query_requests_latest("latest artificial intelligence papers"))
         self.assertEqual(server.arxiv_search_query("latest artificial intelligence papers"), "cat:cs.AI")
+        self.assertEqual(server.arxiv_search_query("latest papers", category="cs.LG"), "cat:cs.LG")
+        self.assertEqual(server.normalize_arxiv_category("machine learning"), "cs.LG")
         self.assertEqual(server.arxiv_search_query("RAG evaluation benchmark"), "all:RAG evaluation benchmark")
+
+    def test_openalex_empty_abstract_is_safe(self):
+        result = server.SearchResult(
+            "x",
+            "https://example.com",
+            "OpenAlex",
+            snippet=server.summarize_text(None, 20),
+        )
+        self.assertEqual(result.snippet, "")
+
+    def test_framed_response_encoding(self):
+        payload = server.encode_mcp_frame({"jsonrpc": "2.0", "id": 1, "result": {"ok": True}})
+        self.assertTrue(payload.startswith(b"Content-Length: "))
+        self.assertIn(b"\r\n\r\n", payload)
 
 
 if __name__ == "__main__":

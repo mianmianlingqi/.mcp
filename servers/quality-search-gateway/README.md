@@ -15,11 +15,13 @@
 
 ## MCP 工具
 
-- `search(query, intent, language, freshness)`：自动路由到权威源 API 或 Web 后端。
-- `search_sources(query, source_type)`：专查论文、标准、包生态、安全、代码、模型等源头库。
+- `search(query, intent, language, freshness, category)`：自动路由到权威源 API 或 Web 后端。
+- `search_sources(query, source_type, freshness, category)`：专查论文、标准、包生态、安全、代码、模型等源头库。
+- `latest_papers(query, category, max_results)`：按提交时间查询 arXiv 最新论文，默认 `cs.AI`。
 - `search_and_fetch(query, intent, max_pages)`：先搜索再抓取候选页面正文。
 - `fetch_url(url)`：抓取单个 URL 正文。
 - `compare_sources(query)`：调用至少两个来源并合并去重。
+- `diagnostics()`：检查增强后端是否配置，不返回密钥内容。
 
 ## 运行
 
@@ -32,6 +34,7 @@ python .\quality-search-gateway\server.py --stdio
 ```powershell
 python .\quality-search-gateway\server.py --self-test
 python .\quality-search-gateway\server.py --query "RAG evaluation benchmark recent papers" --intent academic
+python .\quality-search-gateway\server.py --query "latest artificial intelligence papers" --source-type academic --freshness latest --category cs.AI
 ```
 
 ## 可选环境变量

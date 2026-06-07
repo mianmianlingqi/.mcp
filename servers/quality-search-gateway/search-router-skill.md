@@ -6,6 +6,7 @@
 
 ## 路由规则
 
+- 最新论文、arXiv 分类论文：优先 `latest_papers`，按需指定 `category=cs.AI/cs.LG/cs.CL`。
 - 论文、预印本、研究趋势：优先 `search_sources`，`source_type=academic`。
 - DOI、论文出处、出版元数据：优先 `search_sources`，`source_type=academic`。
 - Python 语言设计：优先 `search_sources`，`source_type=standards`。

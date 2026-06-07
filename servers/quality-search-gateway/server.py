@@ -114,7 +114,11 @@ def strip_html(value: str) -> str:
     return value
 
 
-def summarize_text(text: str, limit: int = 1800) -> str:
+def summarize_text(text: Any, limit: int = 1800) -> str:
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
     text = strip_html(text)
     if len(text) <= limit:
         return text
@@ -184,18 +188,64 @@ def wants_latest(value: str = "") -> bool:
     return any(token in q for token in ["latest", "recent", "new", "newest", "fresh", "最新", "近期", "最近"])
 
 
-def arxiv_search_query(query: str) -> str:
+def query_requests_latest(value: str = "") -> bool:
+    q = value.lower()
+    return any(token in q for token in ["latest", "newest", "最新"])
+
+
+ARXIV_CATEGORY_ALIASES = {
+    "ai": "cs.AI",
+    "cs.ai": "cs.AI",
+    "artificial intelligence": "cs.AI",
+    "人工智能": "cs.AI",
+    "ml": "cs.LG",
+    "machine learning": "cs.LG",
+    "机器学习": "cs.LG",
+    "nlp": "cs.CL",
+    "natural language processing": "cs.CL",
+    "自然语言处理": "cs.CL",
+    "robotics": "cs.RO",
+    "机器人": "cs.RO",
+}
+
+
+def query_has_alias(query: str, token: str) -> bool:
+    if token in {"ai", "ml", "nlp"}:
+        return bool(re.search(rf"\b{re.escape(token)}\b", query))
+    return token in query
+
+
+def normalize_arxiv_category(value: str = "") -> str:
+    category = value.strip()
+    if not category:
+        return ""
+    mapped = ARXIV_CATEGORY_ALIASES.get(category.lower(), category)
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", mapped):
+        raise GatewayError(f"非法 arXiv category：{value}")
+    return mapped
+
+
+def arxiv_search_query(query: str, category: str = "") -> str:
+    explicit_category = normalize_arxiv_category(category)
+    if explicit_category:
+        return f"cat:{explicit_category}"
     q = query.lower()
-    if any(token in q for token in ["cs.ai", "artificial intelligence", "人工智能"]) or re.search(r"\bai\b", q):
-        return "cat:cs.AI"
+    for token, mapped in ARXIV_CATEGORY_ALIASES.items():
+        if query_has_alias(q, token):
+            return f"cat:{mapped}"
     return f"all:{query}"
 
 
-def search_arxiv(query: str, max_results: int = MAX_RESULTS, freshness: str = "") -> List[SearchResult]:
-    latest = wants_latest(f"{query} {freshness}")
+def search_arxiv(
+    query: str,
+    max_results: int = MAX_RESULTS,
+    freshness: str = "",
+    category: str = "",
+) -> List[SearchResult]:
+    latest = wants_latest(freshness) or query_requests_latest(query)
     params = urllib.parse.urlencode(
         {
-            "search_query": arxiv_search_query(query),
+            "search_query": arxiv_search_query(query, category=category),
             "start": 0,
             "max_results": max_results,
             "sortBy": "submittedDate" if latest else "relevance",
@@ -276,12 +326,13 @@ def search_openalex(query: str, max_results: int = MAX_RESULTS) -> List[SearchRe
     results: List[SearchResult] = []
     for work in data.get("results", []):
         doi = work.get("doi")
+        abstract = inverted_abstract(work) if work.get("abstract_inverted_index") else ""
         results.append(
             SearchResult(
                 title=work.get("display_name") or "未命名作品",
                 url=doi or work.get("id") or "",
                 source="OpenAlex",
-                snippet=summarize_text(work.get("abstract_inverted_index") and inverted_abstract(work), 500),
+                snippet=summarize_text(abstract, 500),
                 metadata={
                     "doi": doi.replace("https://doi.org/", "") if isinstance(doi, str) else doi,
                     "year": work.get("publication_year"),
@@ -712,7 +763,13 @@ def fetch_url_content(url: str) -> Dict[str, Any]:
     return {"url": url, "title": title, "source": "standard-fetch", "content": summarize_text(text, 3000), "metadata": {}}
 
 
-def call_backend(name: str, query: str, max_results: int = MAX_RESULTS, freshness: str = "") -> List[SearchResult]:
+def call_backend(
+    name: str,
+    query: str,
+    max_results: int = MAX_RESULTS,
+    freshness: str = "",
+    category: str = "",
+) -> List[SearchResult]:
     mapping = {
         "arxiv": search_arxiv,
         "semantic_scholar": search_semantic_scholar,
@@ -731,7 +788,7 @@ def call_backend(name: str, query: str, max_results: int = MAX_RESULTS, freshnes
     }
     fn = mapping[name]
     if name == "arxiv":
-        return fn(query, max_results=max_results, freshness=freshness)
+        return fn(query, max_results=max_results, freshness=freshness, category=category)
     return fn(query, max_results=max_results)
 
 
@@ -757,7 +814,13 @@ PACKAGE_BACKENDS = {
 }
 
 
-def run_route(query: str, source_type: str, max_results: int = MAX_RESULTS, freshness: str = "") -> Dict[str, Any]:
+def run_route(
+    query: str,
+    source_type: str,
+    max_results: int = MAX_RESULTS,
+    freshness: str = "",
+    category: str = "",
+) -> Dict[str, Any]:
     if source_type == "packages":
         route = package_route(query)
     elif source_type == "standards":
@@ -768,7 +831,7 @@ def run_route(query: str, source_type: str, max_results: int = MAX_RESULTS, fres
     errors: List[str] = []
     for backend in route:
         try:
-            results = call_backend(backend, query, max_results=max_results, freshness=freshness)
+            results = call_backend(backend, query, max_results=max_results, freshness=freshness, category=category)
             all_results.extend(results)
         except Exception as exc:  # noqa: BLE001 - 需要保留后端降级信息
             errors.append(f"{backend}: {exc}")
@@ -809,15 +872,54 @@ def tool_search(args: Dict[str, Any]) -> Dict[str, Any]:
     intent = str(args.get("intent") or "")
     language = str(args.get("language") or "")
     freshness = str(args.get("freshness") or "")
+    category = str(args.get("category") or "")
     source_type = infer_source_type(query, intent, language)
-    return run_route(query, source_type, max_results=int(args.get("max_results") or MAX_RESULTS), freshness=freshness)
+    return run_route(
+        query,
+        source_type,
+        max_results=int(args.get("max_results") or MAX_RESULTS),
+        freshness=freshness,
+        category=category,
+    )
 
 
 def tool_search_sources(args: Dict[str, Any]) -> Dict[str, Any]:
     query = require_str(args, "query")
     source_type = str(args.get("source_type") or infer_source_type(query))
     freshness = str(args.get("freshness") or "")
-    return run_route(query, source_type, max_results=int(args.get("max_results") or MAX_RESULTS), freshness=freshness)
+    category = str(args.get("category") or "")
+    return run_route(
+        query,
+        source_type,
+        max_results=int(args.get("max_results") or MAX_RESULTS),
+        freshness=freshness,
+        category=category,
+    )
+
+
+def tool_latest_papers(args: Dict[str, Any]) -> Dict[str, Any]:
+    query = str(args.get("query") or "latest artificial intelligence papers")
+    category = normalize_arxiv_category(str(args.get("category") or "cs.AI"))
+    max_results = max(1, min(int(args.get("max_results") or MAX_RESULTS), 20))
+    return run_route(query, "academic", max_results=max_results, freshness="latest", category=category)
+
+
+def tool_diagnostics(args: Dict[str, Any]) -> Dict[str, Any]:
+    del args
+    env_vars = ["EXA_API_KEY", "FIRECRAWL_API_KEY", "GITHUB_TOKEN", "SEMANTIC_SCHOLAR_API_KEY"]
+    configured = {name: bool(os.getenv(name)) for name in env_vars}
+    return {
+        "server": "quality-search-gateway",
+        "version": "0.2.0",
+        "configured_env": configured,
+        "free_backends": ["arXiv", "OpenAlex", "Crossref", "PEPs", "IETF", "MDN", "OSV", "PyPI", "npm", "Hugging Face"],
+        "enhanced_backends": {
+            "Exa": configured["EXA_API_KEY"],
+            "Firecrawl": configured["FIRECRAWL_API_KEY"],
+            "GitHub": configured["GITHUB_TOKEN"],
+            "Semantic Scholar": configured["SEMANTIC_SCHOLAR_API_KEY"],
+        },
+    }
 
 
 def tool_fetch_url(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -885,6 +987,7 @@ TOOLS = {
                 "intent": {"type": "string"},
                 "language": {"type": "string"},
                 "freshness": {"type": "string"},
+                "category": {"type": "string", "description": "arXiv category，例如 cs.AI、cs.LG、cs.CL"},
                 "max_results": {"type": "integer", "minimum": 1, "maximum": 10},
             },
             "required": ["query"],
@@ -902,9 +1005,22 @@ TOOLS = {
                     "enum": ["academic", "standards", "security", "packages", "code", "models", "web", "web_cn"],
                 },
                 "freshness": {"type": "string"},
+                "category": {"type": "string", "description": "arXiv category，例如 cs.AI、cs.LG、cs.CL"},
                 "max_results": {"type": "integer", "minimum": 1, "maximum": 10},
             },
             "required": ["query"],
+        },
+    },
+    "latest_papers": {
+        "description": "按提交时间查询 arXiv 最新论文，默认 cs.AI，可指定 cs.LG、cs.CL 等 category。",
+        "handler": tool_latest_papers,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "category": {"type": "string", "default": "cs.AI"},
+                "max_results": {"type": "integer", "minimum": 1, "maximum": 20},
+            },
         },
     },
     "search_and_fetch": {
@@ -936,6 +1052,14 @@ TOOLS = {
             "type": "object",
             "properties": {"query": {"type": "string"}},
             "required": ["query"],
+        },
+    },
+    "diagnostics": {
+        "description": "检查 gateway 后端和 API key 配置状态，不返回密钥内容。",
+        "handler": tool_diagnostics,
+        "schema": {
+            "type": "object",
+            "properties": {},
         },
     },
 }
@@ -994,25 +1118,104 @@ def handle_mcp(request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return {"jsonrpc": "2.0", "id": req_id, "error": {"code": -32000, "message": str(exc)}}
 
 
+def encode_mcp_frame(response: Dict[str, Any]) -> bytes:
+    body = json.dumps(response, ensure_ascii=False).encode("utf-8")
+    return f"Content-Length: {len(body)}\r\n\r\n".encode("ascii") + body
+
+
+def write_mcp_response(response: Optional[Dict[str, Any]], *, framed: bool) -> None:
+    if response is None:
+        return
+    if framed:
+        sys.stdout.buffer.write(encode_mcp_frame(response))
+        sys.stdout.buffer.flush()
+    else:
+        print(json.dumps(response, ensure_ascii=False), flush=True)
+
+
+def iter_content_length_messages() -> Iterable[Dict[str, Any]]:
+    stdin = sys.stdin.buffer
+    while True:
+        headers: Dict[str, str] = {}
+        while True:
+            line = stdin.readline()
+            if not line:
+                return
+            if line in (b"\r\n", b"\n"):
+                break
+            name, _, value = line.decode("ascii", errors="replace").partition(":")
+            headers[name.lower()] = value.strip()
+        length = int(headers.get("content-length") or "0")
+        if length <= 0:
+            continue
+        payload = stdin.read(length)
+        yield json.loads(payload.decode("utf-8"))
+
+
+def iter_line_json_messages() -> Iterable[Dict[str, Any]]:
+    for raw in sys.stdin.buffer:
+        line = raw.decode("utf-8").strip()
+        if line:
+            yield json.loads(line)
+
+
+def process_stdio_request(request: Dict[str, Any], *, framed: bool) -> None:
+    try:
+        response = handle_mcp(request)
+        write_mcp_response(response, framed=framed)
+    except Exception as exc:  # noqa: BLE001
+        write_mcp_response(
+            {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": f"请求解析失败：{exc}"}},
+            framed=framed,
+        )
+
+
 def run_stdio() -> None:
     log("MCP stdio 服务已启动")
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
+    first = sys.stdin.buffer.readline()
+    if not first:
+        return
+    if first.lower().startswith(b"content-length:"):
+        buffered = [first]
+        while True:
+            line = sys.stdin.buffer.readline()
+            buffered.append(line)
+            if line in (b"\r\n", b"\n", b""):
+                break
+        headers: Dict[str, str] = {}
+        for line in buffered:
+            if line in (b"\r\n", b"\n", b""):
+                continue
+            name, _, value = line.decode("ascii", errors="replace").partition(":")
+            headers[name.lower()] = value.strip()
+        length = int(headers.get("content-length") or "0")
+        first_payload = sys.stdin.buffer.read(length) if length > 0 else b""
+        framed = True
         try:
-            request = json.loads(line)
-            response = handle_mcp(request)
-            if response is not None:
-                print(json.dumps(response, ensure_ascii=False), flush=True)
+            messages = [json.loads(first_payload.decode("utf-8"))]
         except Exception as exc:  # noqa: BLE001
-            print(
-                json.dumps(
-                    {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": f"请求解析失败：{exc}"}},
-                    ensure_ascii=False,
-                ),
-                flush=True,
+            write_mcp_response(
+                {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": f"请求解析失败：{exc}"}},
+                framed=framed,
             )
+            messages = []
+        iterator = iter_content_length_messages()
+    else:
+        framed = False
+        try:
+            messages = [json.loads(first.decode("utf-8").strip())]
+        except Exception as exc:  # noqa: BLE001
+            write_mcp_response(
+                {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": f"请求解析失败：{exc}"}},
+                framed=framed,
+            )
+            messages = []
+        iterator = iter_line_json_messages()
+
+    for request in messages:
+        process_stdio_request(request, framed=framed)
+    for request in iterator:
+        process_stdio_request(request, framed=framed)
 
 
 def run_self_test() -> int:
@@ -1048,6 +1251,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--intent", default="", help="查询意图")
     parser.add_argument("--source-type", default="", help="显式来源类型")
     parser.add_argument("--freshness", default="", help="新鲜度偏好，例如 latest/recent/最新")
+    parser.add_argument("--category", default="", help="arXiv category，例如 cs.AI、cs.LG、cs.CL")
     args = parser.parse_args(argv)
 
     if args.stdio:
@@ -1057,7 +1261,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         return run_self_test()
     if args.query:
         source_type = args.source_type or infer_source_type(args.query, args.intent)
-        print(json.dumps(run_route(args.query, source_type, max_results=5, freshness=args.freshness), ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                run_route(args.query, source_type, max_results=5, freshness=args.freshness, category=args.category),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
         return 0
     parser.print_help()
     return 0
