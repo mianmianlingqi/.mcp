@@ -12,4 +12,21 @@ accounts/
 secrets/
 .env
 .env.*
+runtime/
+reports/
+bin/
+obj/
+bin-v17/
+obj-v17/
+bin-v20/
+obj-v20/
+*.exe
+*.dll
+*.pdb
+*.ap17
+*.zap17
+*.als17
+*.user
+*.suo
+.vs/
 

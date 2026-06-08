@@ -21,6 +21,7 @@ private Codex config files.
 ## Current MCPs
 
 - `tia_portal_v17`: local Siemens TIA Portal Openness V17 MCP.
+- `tia_portal_v17_plc_software_phase2`: TIA Portal V17 PLC-Software Phase2 profile, scoped to PLC software tools and minimal base tools.
 - `openaiDeveloperDocs`: OpenAI official developer docs MCP.
 - `deepwiki`: DeepWiki repository documentation MCP.
 - `context7`: current library/framework documentation MCP.
@@ -32,6 +33,10 @@ private Codex config files.
 
 See `docs/engineering-knowledge-sources.md` for the curated engineering source
 list used to guide search routing.
+
+## Local Servers
+
+- `servers/tia-v17-plc-software-mcp-phase2/`: TIA Portal V17 PLC-Software MCP Phase2 source package. Runtime binaries are intentionally excluded from Git; build or use the local deliverable package before installing the registry snippet.
 
 ## Safety
 

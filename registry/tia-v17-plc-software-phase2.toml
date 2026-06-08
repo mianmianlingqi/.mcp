@@ -1,0 +1,9 @@
+[mcp_servers.tia_portal_v17_plc_software_phase2]
+command = '{{TIA_V17_PLC_SOFTWARE_PHASE2_MCP_SERVER_EXE}}'
+args = [
+  "--tia-major-version", "17",
+  "--tia-portal-location", '{{TIA_PORTAL_V17_ROOT}}',
+  "--tool-profile", "plc-software-v17-phase2"
+]
+startup_timeout_sec = 20.0
+tool_timeout_sec = 600.0

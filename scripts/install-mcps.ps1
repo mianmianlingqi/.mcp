@@ -2,7 +2,7 @@ param(
   [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path,
   [string]$CodexConfig = (Join-Path $env:USERPROFILE '.codex\config.toml'),
   [string]$ProfilePath = (Join-Path $RepoRoot 'profiles\current.toml'),
-  [string[]]$Names = @('tia_portal_v17', 'openai-developer-docs', 'deepwiki', 'context7', 'github', 'office-document', 'quality-search-gateway'),
+  [string[]]$Names = @('tia_portal_v17', 'tia-v17-plc-software-phase2', 'openai-developer-docs', 'deepwiki', 'context7', 'github', 'office-document', 'quality-search-gateway'),
   [switch]$DryRun,
   [switch]$Apply
 )

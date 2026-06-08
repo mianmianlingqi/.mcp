@@ -3,6 +3,7 @@
 
 include = [
   "registry/tia_portal_v17.toml",
+  "registry/tia-v17-plc-software-phase2.toml",
   "registry/openai-developer-docs.toml",
   "registry/deepwiki.toml",
   "registry/context7.toml",
@@ -14,5 +15,6 @@ include = [
 [placeholders]
 CODEX_HOME = 'C:\Users\35928\.codex'
 TIA_V17_MCP_SERVER_EXE = 'A:\project\TIA_V17_MCP_workspace_20260605_211635\source\TIA_Portal_Openness_MCP_v17\tools\tiaportal-mcp\src\TiaMcpServer\bin-v17\Release\net48\TiaMcpServer.exe'
+TIA_V17_PLC_SOFTWARE_PHASE2_MCP_SERVER_EXE = 'A:\project\TIA_V17_PLC_Software_MCP_Phase2_Deliverable_20260608_101552\runtime\TiaMcpServer.exe'
 TIA_PORTAL_V17_ROOT = 'E:\software\Botuv17\Automation\Portal V17'
 
